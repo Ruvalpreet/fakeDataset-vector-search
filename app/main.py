@@ -19,11 +19,10 @@ async def read_form(request: Request):
 async def process_form(request: Request, prompt: str = Form(...)):
     # Process the prompt and get the response
     newResponse = promptResponse(prompt)
-    
     # Perform search based on the prompt
     client = pymongo.MongoClient("")
-    db = client.sample_mflix
-    collection = db.movies
+    db = client.walmart
+    collection = db.walmart_item
     hf_token = ""
     
     if not hf_token:
@@ -42,38 +41,37 @@ async def process_form(request: Request, prompt: str = Form(...)):
         return response.json()
 
 
-    try:
-        for doc in collection.find({'plot': {"$exists": True}}).limit(50):
-            doc['plot_embedding_hf'] = generate_embedding(doc['plot'])
-            collection.replace_one({'_id': doc['_id']}, doc)
-    except Exception as e:
-        print(f"Error updating documents: {e}")
+    # try:
+    #     for doc in collection.find({"item_description": {"$exists": True}}):
+    #         doc['plot_embedding_hf'] = generate_embedding(doc['item_description'])
+    #         collection.replace_one({'_id': doc['_id']}, doc)
+    # except Exception as e:
+    #     print(f"Error updating documents: {e}")
 
-    # Perform search
     try:
-        results = collection.aggregate([
-            {
-                "$search": {
-                    "index": "PlotSemanticSearch",
-                    "text": {
-                        "query": prompt,
-                        "path": "plot"
-                    }
-                }
-            },
-            {
-                "$limit": 4
-            }
-        ])
+      print("Prompt: ", prompt)
+      results = collection.aggregate([
+        {"$vectorSearch": {
+          "queryVector": generate_embedding(prompt),
+          "path": "plot_embedding_hf",
+          "numCandidates": 100,
+          "limit": 4,
+          "index": "walmart_search",
+            }}
+      ]);
 
-        search_results = []
-        for document in results:
-            search_results.append({
-                "title": document["title"],
-                "plot": document["plot"]
-            })
+      # print("Results: ", list(results))
+
+      search_results = []
+      for document in results:
+          print("Results is running")
+          print("Document: ", document)
+          search_results.append({
+              "item_name": document["item_name"],
+          })
+
     except Exception as e:
-        print(f"Error performing search: {e}")
+        print(f"Error performing search:{e}")
         search_results = []
 
     return templates.TemplateResponse("form.html", {
